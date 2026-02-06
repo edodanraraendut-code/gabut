@@ -461,25 +461,24 @@ video, canvas { position: absolute; opacity: 0; pointer-events: none; }
 
   // Download ZIP
   document.getElementById('downloadZipBtn').addEventListener('click', async () => {
-    // 1. Validasi awal
-    if (!currentUser || !currentSessionId) {
-        alert("Sesi atau user tidak ditemukan.");
+    // Gunakan session ID yang sedang aktif
+    if (!currentSessionId) {
+        alert("Sesi tidak ditemukan.");
         return;
     }
 
     const btn = document.getElementById('downloadZipBtn');
     const originalText = btn.innerHTML;
     
-    // 2. Feedback Visual
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sedang Mengunduh Gambar...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyiapkan ZIP...';
 
     try {
-        // 3. Ambil daftar URL dari Firebase
-        const snapshot = await get(ref(db, `users/${currentUser.uid}/sessions/${currentSessionId}/images`));
+        // PERBAIKAN: Path harus sama dengan path tempat foto muncul di dashboard (global_sessions)
+        const snapshot = await get(ref(db, `global_sessions/${currentSessionId}/images`));
         
         if (!snapshot.exists()) {
-            alert("Tidak ada gambar untuk diunduh.");
+            alert("Data gambar tidak ditemukan di database.");
             btn.disabled = false;
             btn.innerHTML = originalText;
             return;
@@ -487,96 +486,39 @@ video, canvas { position: absolute; opacity: 0; pointer-events: none; }
 
         const urls = Object.values(snapshot.val());
         const zip = new JSZip();
-        const folder = zip.folder(`Captures_${currentSessionId}`);
-
-        // 4. Proses Download Gambar satu per satu (Parallel)
-        const downloadPromises = urls.map(async (url, index) => {
-            try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error('Network response was not ok');
-                const blob = await response.blob();
-                folder.file(`image_${index + 1}.jpg`, blob);
-            } catch (err) {
-                console.error("Gagal mengunduh gambar:", url, err);
-            }
-        });
-
-        await Promise.all(downloadPromises);
-
-        // 5. Generate ZIP dan Trigger Download
-        const content = await zip.generateAsync({ type: "blob" });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(content);
-        a.download = `EVIDENCE_${currentSessionId}.zip`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-
-    } catch (error) {
-        console.error("Gagal membuat ZIP:", error);
-        alert("Gagal memproses ZIP. Periksa koneksi internet.");
-    } finally {
-        // 6. Kembalikan status tombol
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-    }
-});document.getElementById('downloadZipBtn').addEventListener('click', async () => {
-    // 1. Validasi awal
-    if (!currentUser || !currentSessionId) {
-        alert("Sesi atau user tidak ditemukan.");
-        return;
-    }
-
-    const btn = document.getElementById('downloadZipBtn');
-    const originalText = btn.innerHTML;
-    
-    // 2. Feedback Visual
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sedang Mengunduh Gambar...';
-
-    try {
-        // 3. Ambil daftar URL dari Firebase
-        const snapshot = await get(ref(db, `users/${currentUser.uid}/sessions/${currentSessionId}/images`));
         
-        if (!snapshot.exists()) {
-            alert("Tidak ada gambar untuk diunduh.");
-            btn.disabled = false;
-            btn.innerHTML = originalText;
-            return;
-        }
-
-        const urls = Object.values(snapshot.val());
-        const zip = new JSZip();
+        // Buat folder di dalam ZIP
         const folder = zip.folder(`Captures_${currentSessionId}`);
 
-        // 4. Proses Download Gambar satu per satu (Parallel)
+        // Proses download gambar satu per satu
         const downloadPromises = urls.map(async (url, index) => {
             try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error('Network response was not ok');
+                // Tambahkan mode 'cors' untuk memastikan browser diizinkan mengambil data
+                const response = await fetch(url, { mode: 'cors' });
+                if (!response.ok) throw new Error('Gagal fetch gambar');
                 const blob = await response.blob();
-                folder.file(`image_${index + 1}.jpg`, blob);
+                folder.file(`capture_${index + 1}.jpg`, blob);
             } catch (err) {
-                console.error("Gagal mengunduh gambar:", url, err);
+                console.warn("Melewati satu gambar karena gagal unduh:", url);
             }
         });
 
         await Promise.all(downloadPromises);
 
-        // 5. Generate ZIP dan Trigger Download
-        const content = await zip.generateAsync({ type: "blob" });
+        // Cek jika ada file yang berhasil dimasukkan ke ZIP
+        const zipContent = await zip.generateAsync({ type: "blob" });
+        
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(content);
-        a.download = `EVIDENCE_${currentSessionId}.zip`;
+        a.href = URL.createObjectURL(zipContent);
+        a.download = `SESS_${currentSessionId}_IMAGES.zip`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
 
     } catch (error) {
-        console.error("Gagal membuat ZIP:", error);
-        alert("Gagal memproses ZIP. Periksa koneksi internet.");
+        console.error("Gagal ZIP:", error);
+        alert("Terjadi kesalahan teknis saat membuat ZIP.");
     } finally {
-        // 6. Kembalikan status tombol
         btn.disabled = false;
         btn.innerHTML = originalText;
     }
